@@ -1,0 +1,9 @@
+[package]
+name = "line"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tokio = { workspace = true, features = ["io-util"] }
+tokio-rustls.workspace = true
+tracing.workspace = true

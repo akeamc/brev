@@ -1,0 +1,21 @@
+[package]
+name = "imap"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+auth.workspace = true
+async-trait.workspace = true
+base64 = "0.21"
+const_format = "0.2.31"
+futures-util.workspace = true
+line.workspace = true
+nom.workspace = true
+paste = "1.0.14"
+rustls.workspace = true
+secrecy.workspace = true
+strum = { version = "0.25.0", features = ["derive"] }
+thiserror.workspace = true
+tokio = { workspace = true, features = [] }
+tracing.workspace = true
+util.workspace = true

@@ -1,0 +1,9 @@
+[package]
+name = "smtp-client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.72"
+lettre = { version = "0.10.4", features = ["tracing"] }
+tracing-subscriber = { version = "0.3.17", features = ["env-filter"] }

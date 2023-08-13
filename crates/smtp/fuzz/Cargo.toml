@@ -1,0 +1,34 @@
+[package]
+name = "smtp-fuzz"
+version = "0.0.0"
+publish = false
+edition = "2021"
+
+[package.metadata]
+cargo-fuzz = true
+
+[dependencies]
+libfuzzer-sys = "0.4"
+tokio = { version = "1", features = ["full"] }
+
+[dependencies.smtp]
+path = ".."
+
+# Prevent this from interfering with workspaces
+[workspace]
+members = ["."]
+
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "data"
+path = "fuzz_targets/data.rs"
+test = false
+doc = false
+
+[[bin]]
+name = "server"
+path = "fuzz_targets/server.rs"
+test = false
+doc = false
