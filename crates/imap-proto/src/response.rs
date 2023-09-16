@@ -1,5 +1,7 @@
 use std::{borrow::Cow, fmt};
 
+use auth::{sasl::MechanismError, ValidationError};
+
 use crate::Tag;
 
 #[derive(Debug)]
@@ -64,6 +66,24 @@ pub struct TaggedStatusResponse {
 impl fmt::Display for TaggedStatusResponse {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} {} {}\r\n", self.tag, self.status, self.message)
+    }
+}
+
+impl From<ValidationError> for StatusResponse {
+    fn from(value: ValidationError) -> Self {
+        match value {
+            ValidationError::InvalidCredentials => Self::no("invalid credentials"),
+            ValidationError::Unknown => Self::bad("invalid identity"),
+        }
+    }
+}
+
+impl From<MechanismError> for StatusResponse {
+    fn from(value: MechanismError) -> Self {
+        match value {
+            MechanismError::Decode => Self::bad("failed to decode response"),
+            MechanismError::Validation(e) => e.into(),
+        }
     }
 }
 

@@ -1,6 +1,6 @@
 use std::{net::SocketAddr, sync::Arc};
 
-use line::stream::{MaybeTlsStream, ServerTlsStream};
+use line::stream::{MaybeTls, ServerTlsStream};
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio_rustls::{rustls, TlsAcceptor};
 use tracing::info;
@@ -45,18 +45,15 @@ impl MultiListener {
 
     pub async fn accept(
         &self,
-    ) -> std::io::Result<(
-        MaybeTlsStream<ServerTlsStream<TcpStream>, TcpStream>,
-        SocketAddr,
-    )> {
+    ) -> std::io::Result<(MaybeTls<ServerTlsStream<TcpStream>, TcpStream>, SocketAddr)> {
         tokio::select! {
             plain = self.plain.accept() => {
                 let (stream, addr) = plain?;
-                Ok((MaybeTlsStream::plain(stream), addr))
+                Ok((MaybeTls::from_plain(stream), addr))
             }
             tls = self.accept_tls() => {
                 let (stream, addr) = tls?;
-                Ok((MaybeTlsStream::tls(stream), addr))
+                Ok((MaybeTls::from_tls(stream), addr))
             }
         }
     }

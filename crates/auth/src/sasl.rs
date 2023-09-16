@@ -4,7 +4,7 @@ pub mod plain;
 
 pub use plain::Plain;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum MechanismKind {
     Plain,
 }

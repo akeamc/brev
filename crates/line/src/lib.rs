@@ -1,6 +1,6 @@
 pub mod stream;
 
-use stream::{MaybeTlsStream, Tls};
+use stream::{MaybeTls, Tls};
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader};
 use tracing::debug;
 
@@ -55,17 +55,17 @@ pub async fn read_line<R: AsyncBufRead + Unpin>(
 }
 
 pub struct Connection<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> {
-    stream: BufReader<MaybeTlsStream<T, IO>>,
+    stream: BufReader<MaybeTls<T, IO>>,
 }
 
 impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> Connection<T, IO> {
-    pub fn new(stream: impl Into<MaybeTlsStream<T, IO>>) -> Self {
+    pub fn new(stream: impl Into<MaybeTls<T, IO>>) -> Self {
         Self {
             stream: BufReader::new(stream.into()),
         }
     }
 
-    pub fn stream_mut(&mut self) -> &mut BufReader<MaybeTlsStream<T, IO>> {
+    pub fn stream_mut(&mut self) -> &mut BufReader<MaybeTls<T, IO>> {
         &mut self.stream
     }
 

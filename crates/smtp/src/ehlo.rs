@@ -105,11 +105,7 @@ impl fmt::Display for Response {
             .extensions
             .names()
             .map(Cow::Borrowed)
-            .chain(
-                self.size
-                    .map(|s| Cow::Owned(format!("SIZE {s}")))
-                    .into_iter(),
-            )
+            .chain(self.size.map(|s| Cow::Owned(format!("SIZE {s}"))))
             .chain(iter::once(self.auth.to_string().into()))
             .peekable();
 
@@ -151,7 +147,7 @@ impl Response {
     /// );
     ///
     /// assert_eq!(
-    ///     Response::parse(&mut ehlo).await.unwrap(),
+    ///     Response::read(&mut ehlo).await.unwrap(),
     ///     Response {
     ///         domain: "mail.example.com".to_owned(),
     ///         extensions: Extensions::_8BITMIME
@@ -164,7 +160,11 @@ impl Response {
     /// );
     /// # });
     /// ```
-    pub async fn parse<R: AsyncRead + AsyncBufRead + Unpin>(
+    ///
+    /// # Errors
+    ///
+    /// Returns [`ParseError::Syntax`] if the response is malformed.
+    pub async fn read<R: AsyncRead + AsyncBufRead + Unpin>(
         reader: &mut R,
     ) -> Result<Self, ParseError> {
         let mut line = Vec::new();
@@ -281,7 +281,7 @@ mod tests {
         .join("\r\n");
 
         assert_eq!(
-            Response::parse(&mut BufReader::new(ehlo.as_bytes()))
+            Response::read(&mut BufReader::new(ehlo.as_bytes()))
                 .await
                 .unwrap(),
             Response {
@@ -302,7 +302,7 @@ mod tests {
             auth: Auth::all(),
         };
         assert_eq!(
-            Response::parse(&mut BufReader::new(ehlo.to_string().as_bytes()))
+            Response::read(&mut BufReader::new(ehlo.to_string().as_bytes()))
                 .await
                 .unwrap(),
             ehlo

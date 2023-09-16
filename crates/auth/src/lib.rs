@@ -7,6 +7,7 @@ pub struct Credentials {
     pub password: SecretString,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Identity(pub String);
 
 #[derive(Debug, thiserror::Error)]

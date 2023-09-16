@@ -2,7 +2,7 @@ use std::fmt;
 
 use util::flags;
 
-use super::fmt_paren_list;
+use crate::fmt_paren_list;
 
 flags! {
     pub Attributes: u16 {
@@ -32,6 +32,7 @@ impl fmt::Display for Attributes {
     }
 }
 
+#[derive(Debug)]
 pub struct ListItem {
     pub name: String,
     pub attributes: Attributes,

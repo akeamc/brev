@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use brev::MultiListener;
+use brev::{operations, MultiListener};
+use futures_util::{stream::FuturesUnordered, FutureExt, StreamExt};
 use smtp::server::session::Session;
 use sqlx::PgPool;
 use tokio::{
@@ -23,19 +24,25 @@ impl auth::Validator for Auth {
     }
 }
 
-pub async fn handle_imap<IO: AsyncRead + AsyncWrite + Unpin, V: auth::Validator>(
-    mut session: imap::server::Session<IO, V>,
+pub async fn handle_imap<IO: AsyncRead + AsyncWrite + Unpin, A: auth::Validator>(
+    mut session: imap::server::Session<IO, A>,
 ) -> anyhow::Result<()> {
-    session.greet().await?;
+    let mut futures = FuturesUnordered::new();
 
-    session.next_op().await?;
-
-    todo!()
+    loop {
+        tokio::select! {
+            Some(()) = futures.next() => {}
+            Some(res) = session.next_op().map(Result::transpose) => futures.push(operations::handle(res?)),
+            else => {
+                return Ok(());
+            }
+        }
+    }
 }
 
 #[instrument(skip_all)]
-async fn imap<V: auth::Validator + 'static>(
-    context: imap::server::Context<V>,
+async fn imap<A: auth::Validator + 'static>(
+    context: imap::server::Context<A>,
 ) -> anyhow::Result<()> {
     let mut listener = MultiListener::new("0.0.0.0:143").await?;
     if let Some(tls) = context.tls.clone() {
@@ -77,14 +84,16 @@ async fn main() -> anyhow::Result<()> {
             .unwrap(),
     );
 
+    let auth = Arc::new(Auth);
     let imap = tokio::spawn(imap(imap::server::Context {
         tls: Some(tls_config.clone()),
-        auth: Arc::new(Auth),
+        auth: auth.clone(),
     }));
     let smtp = tokio::spawn(smtp(
-        smtp::server::Config {
+        smtp::server::Context {
             hostname: "localhost".to_owned(),
             tls: Some(tls_config.clone()),
+            auth: auth.clone(),
         },
         pool.clone(),
     ));
@@ -96,13 +105,16 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[instrument(skip_all)]
-async fn smtp(config: smtp::server::Config, pool: PgPool) -> anyhow::Result<()> {
+async fn smtp<A: auth::Validator + 'static>(
+    context: smtp::server::Context<A>,
+    pool: PgPool,
+) -> anyhow::Result<()> {
     let mut listener = MultiListener::new("0.0.0.0:25").await?;
-    if let Some(tls) = config.tls.clone() {
+    if let Some(tls) = context.tls.clone() {
         listener = listener.with_tls("0.0.0.0:465", tls).await?;
     }
 
-    let server = smtp::Server::new(config);
+    let server = smtp::Server::new(context);
 
     loop {
         let (socket, addr) = listener.accept().await?;
@@ -120,13 +132,11 @@ async fn smtp(config: smtp::server::Config, pool: PgPool) -> anyhow::Result<()> 
     }
 }
 
-async fn handle_connection<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync>(
-    mut session: Session<IO>,
+async fn handle_connection<IO: AsyncRead + AsyncWrite + Unpin + Send + Sync, A: auth::Validator>(
+    mut session: Session<IO, A>,
     _pool: PgPool,
 ) -> anyhow::Result<()> {
     println!("helo");
-
-    session.greet().await?;
 
     while let Some(mut message) = session.next_message().await? {
         println!("Got message: {:?}", message.envelope());

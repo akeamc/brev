@@ -10,7 +10,7 @@ use nom::{
     IResult,
 };
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Attribute {
     Flags,
     Internaldate,
@@ -34,7 +34,7 @@ impl FromStr for Attribute {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, PartialEq, Eq, Clone)]
 pub enum Items {
     All,
     Fast,
@@ -70,7 +70,6 @@ impl Items {
 }
 
 fn parse_attribute(i: &str) -> IResult<&str, Attribute> {
-    dbg!(i);
     map_res(
         take_while1(|c: char| c != ' ' && c != ')'),
         Attribute::from_str,
@@ -108,6 +107,6 @@ mod tests {
                 .unwrap()
                 .1
                 .attributes(),
-        )
+        );
     }
 }

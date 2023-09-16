@@ -8,29 +8,32 @@ pub use tokio_rustls::{
 };
 
 pub trait Tls<IO>: Sized + AsyncRead + AsyncWrite + Unpin {
-    type Future: Future<Output = Result<Self, (std::io::Error, IO)>>;
+    /// The type of the future returned by [`Tls::upgrade`].
+    type Upgrade: Future<Output = Result<Self, (std::io::Error, IO)>>;
 
+    /// The type of the configuration used by [`Tls::upgrade`].
     type Config<'a>;
 
-    fn upgrade(plain: IO, config: Self::Config<'_>) -> Self::Future;
+    /// Upgrade a plaintext stream to TLS.
+    fn upgrade(plain: IO, config: Self::Config<'_>) -> Self::Upgrade;
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> Tls<IO> for ServerTlsStream<IO> {
-    type Future = tokio_rustls::FallibleAccept<IO>;
+    type Upgrade = tokio_rustls::FallibleAccept<IO>;
 
     type Config<'a> = &'a tokio_rustls::TlsAcceptor;
 
-    fn upgrade(plain: IO, config: Self::Config<'_>) -> Self::Future {
+    fn upgrade(plain: IO, config: Self::Config<'_>) -> Self::Upgrade {
         config.accept(plain).into_fallible()
     }
 }
 
 impl<IO: AsyncRead + AsyncWrite + Unpin> Tls<IO> for ClientTlsStream<IO> {
-    type Future = tokio_rustls::FallibleConnect<IO>;
+    type Upgrade = tokio_rustls::FallibleConnect<IO>;
 
     type Config<'a> = (ServerName, &'a tokio_rustls::TlsConnector);
 
-    fn upgrade(plain: IO, (domain, config): Self::Config<'_>) -> Self::Future {
+    fn upgrade(plain: IO, (domain, config): Self::Config<'_>) -> Self::Upgrade {
         config.connect(domain, plain).into_fallible()
     }
 }
@@ -41,24 +44,27 @@ enum Inner<T: Tls<IO>, IO> {
     Empty,
 }
 
-pub struct MaybeTlsStream<T: Tls<IO>, IO> {
+/// A stream that may or may not be encrypted.
+///
+/// This is used in STARTTLS implementations.
+pub struct MaybeTls<T: Tls<IO>, IO> {
     inner: Inner<T, IO>,
 }
 
-impl<T: Tls<IO>, IO> From<IO> for MaybeTlsStream<T, IO> {
+impl<T: Tls<IO>, IO> From<IO> for MaybeTls<T, IO> {
     fn from(plain: IO) -> Self {
-        Self::plain(plain)
+        Self::from_plain(plain)
     }
 }
 
-impl<T: Tls<IO>, IO> MaybeTlsStream<T, IO> {
-    pub const fn plain(plain: IO) -> Self {
+impl<T: Tls<IO>, IO> MaybeTls<T, IO> {
+    pub const fn from_plain(plain: IO) -> Self {
         Self {
             inner: Inner::Plain(plain),
         }
     }
 
-    pub const fn tls(tls: T) -> Self {
+    pub const fn from_tls(tls: T) -> Self {
         Self {
             inner: Inner::Tls(tls),
         }
@@ -76,18 +82,27 @@ impl<T: Tls<IO>, IO> MaybeTlsStream<T, IO> {
 async fn upgrade<T: Tls<IO>, IO>(
     inner: Inner<T, IO>,
     config: T::Config<'_>,
-) -> (MaybeTlsStream<T, IO>, std::io::Result<()>) {
+) -> (MaybeTls<T, IO>, std::io::Result<()>) {
     match inner {
         Inner::Plain(plain) => match T::upgrade(plain, config).await {
-            Ok(tls) => (MaybeTlsStream::tls(tls), Ok(())),
-            Err((err, plain)) => (MaybeTlsStream::plain(plain), Err(err)),
+            Ok(tls) => (MaybeTls::from_tls(tls), Ok(())),
+            Err((err, plain)) => (MaybeTls::from_plain(plain), Err(err)),
         },
-        Inner::Tls(plain) => (MaybeTlsStream::tls(plain), Ok(())),
+        Inner::Tls(plain) => (MaybeTls::from_tls(plain), Ok(())),
         Inner::Empty => unreachable!(),
     }
 }
 
-impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> MaybeTlsStream<T, IO> {
+impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> MaybeTls<T, IO> {
+    /// Upgrade the stream to TLS.
+    ///
+    /// If the stream is already encrypted, this is a no-op and `Ok(())` is
+    /// returned.
+    ///
+    /// # Errors
+    ///
+    /// If the TLS handshake fails, an error is returned and the stream is
+    /// reverted to plaintext.
     pub async fn upgrade(&mut self, config: T::Config<'_>) -> std::io::Result<()> {
         let (stream, result) =
             upgrade(std::mem::replace(&mut self.inner, Inner::Empty), config).await;
@@ -96,7 +111,7 @@ impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> MaybeTlsStream<T, IO> {
     }
 }
 
-impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTlsStream<T, IO> {
+impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTls<T, IO> {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,
@@ -110,7 +125,7 @@ impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> AsyncRead for MaybeTlsStrea
     }
 }
 
-impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTlsStream<T, IO> {
+impl<T: Tls<IO>, IO: AsyncRead + AsyncWrite + Unpin> AsyncWrite for MaybeTls<T, IO> {
     fn poll_write(
         mut self: Pin<&mut Self>,
         cx: &mut std::task::Context<'_>,

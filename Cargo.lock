@@ -166,8 +166,11 @@ dependencies = [
  "async-trait",
  "auth",
  "dotenv",
+ "futures-util",
  "imap",
+ "imap-proto",
  "line",
+ "paste",
  "rcgen",
  "smtp",
  "sqlx",
@@ -679,8 +682,8 @@ dependencies = [
  "async-trait",
  "auth",
  "base64",
- "const_format",
  "futures-util",
+ "imap-proto",
  "line",
  "nom",
  "paste",
@@ -689,6 +692,19 @@ dependencies = [
  "strum",
  "thiserror",
  "tokio",
+ "tracing",
+ "util",
+]
+
+[[package]]
+name = "imap-proto"
+version = "0.1.0"
+dependencies = [
+ "auth",
+ "const_format",
+ "nom",
+ "paste",
+ "secrecy",
  "tracing",
  "util",
 ]

@@ -12,7 +12,7 @@ macro_rules! flags {
         }
     ) => {
         $crate::bitflags::bitflags! {
-            #[derive(Debug, PartialEq, Eq)]
+            #[derive(Debug, PartialEq, Eq, Clone, Copy)]
             $(#[$outer])*
             $vis struct $name: $T {
                 $(

@@ -41,7 +41,7 @@ impl From<DecodeError> for super::MechanismError {
 /// # Ok::<(), DecodeError>(())
 /// ```
 pub fn decode(data: &[u8]) -> Result<Credentials, DecodeError> {
-    let mut parts = std::str::from_utf8(&data)?.splitn(3, '\0').skip(1);
+    let mut parts = std::str::from_utf8(data)?.splitn(3, '\0').skip(1);
     let username = parts.next().ok_or(DecodeError::MissingParts)?;
     let password = parts.next().ok_or(DecodeError::MissingParts)?;
 

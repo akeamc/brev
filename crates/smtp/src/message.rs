@@ -24,7 +24,7 @@ impl Envelope {
     pub fn new(from: EmailAddress) -> Self {
         Self {
             from,
-            recipients: Default::default(),
+            recipients: HashSet::new(),
         }
     }
 }

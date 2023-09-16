@@ -1,5 +1,6 @@
+use auth::Identity;
 use line::{
-    stream::{MaybeTlsStream, ServerTlsStream},
+    stream::{MaybeTls, ServerTlsStream},
     Connection,
 };
 use tokio::io::{AsyncRead, AsyncWrite, BufReader};
@@ -12,25 +13,29 @@ use crate::{
     message::{Envelope, Incoming},
 };
 
-type BufTlsStream<IO> = BufReader<MaybeTlsStream<ServerTlsStream<IO>, IO>>;
+type BufTlsStream<IO> = BufReader<MaybeTls<ServerTlsStream<IO>, IO>>;
 
 /// SMTP session with a client.
-pub struct Session<IO: AsyncRead + AsyncWrite + Unpin> {
+pub struct Session<IO: AsyncRead + AsyncWrite + Unpin, A: auth::Validator> {
     connection: Connection<ServerTlsStream<IO>, IO>,
     envelope: Option<Envelope>,
     helo_domain: Option<String>,
-    config: crate::server::Config,
+    identity: Option<Identity>,
+    greeted: bool,
+    config: crate::server::Context<A>,
 }
 
-impl<IO: AsyncRead + AsyncWrite + Unpin> Session<IO> {
+impl<IO: AsyncRead + AsyncWrite + Unpin, A: auth::Validator> Session<IO, A> {
     pub fn new(
-        stream: impl Into<MaybeTlsStream<ServerTlsStream<IO>, IO>>,
-        config: crate::server::Config,
+        stream: impl Into<MaybeTls<ServerTlsStream<IO>, IO>>,
+        config: crate::server::Context<A>,
     ) -> Self {
         Self {
             connection: Connection::new(stream),
             envelope: None,
             helo_domain: None,
+            identity: None,
+            greeted: false,
             config,
         }
     }
@@ -39,7 +44,8 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Session<IO> {
         self.envelope = None;
     }
 
-    pub async fn greet(&mut self) -> std::io::Result<()> {
+    /// Send the SMTP greeting.
+    async fn greet(&mut self) -> std::io::Result<()> {
         self.connection
             .write_flush(format!("220 {}\r\n", self.config.hostname))
             .await
@@ -114,6 +120,7 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Session<IO> {
 
         // reset state
         self.helo_domain = None;
+        self.identity = None;
         self.reset_mail_txn();
 
         Ok(())
@@ -123,6 +130,11 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Session<IO> {
     pub async fn next_message(
         &mut self,
     ) -> std::io::Result<Option<Incoming<'_, BufTlsStream<IO>>>> {
+        if !self.greeted {
+            self.greet().await?;
+            self.greeted = true;
+        }
+
         loop {
             let cmd = match read_cmd(self.connection.stream_mut()).await? {
                 None => return Ok(None),
@@ -197,6 +209,13 @@ impl<IO: AsyncRead + AsyncWrite + Unpin> Session<IO> {
                     if self.envelope.is_some() {
                         self.connection
                             .write_flush("503 transaction already started\r\n")
+                            .await?;
+                        continue;
+                    }
+
+                    if self.identity.is_some() {
+                        self.connection
+                            .write_flush("503 already authenticated\r\n")
                             .await?;
                         continue;
                     }

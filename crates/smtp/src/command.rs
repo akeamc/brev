@@ -42,7 +42,7 @@ pub enum Command {
     Noop,
     Quit,
     Starttls,
-    /// AUTH <mechanism> [initial-response]
+    /// AUTH \<mechanism\> [initial-response]
     ///
     /// See [RFC 4954](https://datatracker.ietf.org/doc/html/rfc4954#section-4).
     Auth {
@@ -150,12 +150,15 @@ async fn read_cmd_inner<S: AsyncRead + AsyncBufRead + AsyncWrite + Unpin>(
 }
 
 /// Read the next command from the stream.
+///
+/// # Errors
+///
+/// - Any I/O errors will be returned.
+/// - If no valid command is received within 5 minutes, a timeout error is returned.
 pub async fn read_cmd<S: AsyncRead + AsyncBufRead + AsyncWrite + Unpin>(
     stream: &mut S,
 ) -> std::io::Result<Option<Command>> {
-    const TIMEOUT: Duration = Duration::from_secs(300);
-
-    match timeout(TIMEOUT, read_cmd_inner(stream)).await {
+    match timeout(Duration::from_secs(300), read_cmd_inner(stream)).await {
         Ok(Ok(cmd)) => Ok(cmd),
         Ok(Err(e)) => Err(e),
         Err(_) => {

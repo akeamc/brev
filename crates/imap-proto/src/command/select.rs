@@ -1,8 +1,8 @@
 use std::fmt;
 
-use crate::{Tag, Uid};
+use crate::{exists, flags, Tag, Uid};
 
-use super::{exists, flags, list::ListItem};
+use super::list::ListItem;
 
 pub struct Response {
     pub flags: flags::Response,
@@ -23,7 +23,7 @@ impl fmt::Display for Response {
         self.mailbox.fmt(f)?;
         write!(
             f,
-            "{} OK [{}] Done",
+            "{} OK [{}] Done\r\n",
             self.tag,
             if self.read_only {
                 "READ-ONLY"
@@ -36,14 +36,9 @@ impl fmt::Display for Response {
 
 #[cfg(test)]
 mod tests {
-    use crate::{
-        protocol::{
-            exists,
-            flags::{self, Flag},
-            list::{Attributes, ListItem},
-        },
-        Uid,
-    };
+    use crate::{command::list::Attributes, flags::Flag};
+
+    use super::*;
 
     #[test]
     fn fmt() {

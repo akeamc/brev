@@ -48,19 +48,19 @@ impl fmt::Display for Bound {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct SequenceRange {
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Range {
     lower: Bound,
     upper: Bound,
 }
 
-impl SequenceRange {
+impl Range {
     pub fn new(lower: Bound, upper: Bound) -> Self {
         Self { lower, upper }
     }
 }
 
-impl fmt::Display for SequenceRange {
+impl fmt::Display for Range {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if self.lower == self.upper {
             return self.lower.fmt(f);
@@ -69,37 +69,37 @@ impl fmt::Display for SequenceRange {
     }
 }
 
-fn parse_nz_u32(i: &str) -> IResult<&str, NonZeroU32> {
+fn parse_nonzero_u32(i: &str) -> IResult<&str, NonZeroU32> {
     map_res(digit1, NonZeroU32::from_str)(i)
 }
 
 impl Bound {
     fn parse(i: &str) -> IResult<&str, Self> {
         alt((
-            map(parse_nz_u32, Self::Inclusive),
+            map(parse_nonzero_u32, Self::Inclusive),
             map(char('*'), |_| Self::Unbounded),
         ))(i)
     }
 }
 
-fn parse_range(i: &str) -> IResult<&str, SequenceRange> {
+fn parse_range(i: &str) -> IResult<&str, Range> {
     let (i, lower_bound) = Bound::parse(i)?;
     let (i, _) = char(':')(i)?;
     let (i, upper_bound) = Bound::parse(i)?;
     Ok((
         i,
-        SequenceRange {
+        Range {
             lower: lower_bound,
             upper: upper_bound,
         },
     ))
 }
 
-impl SequenceRange {
+impl Range {
     fn parse(i: &str) -> IResult<&str, Self> {
         alt((
             map(parse_range, |r| r),
-            map(parse_nz_u32, |n| SequenceRange {
+            map(parse_nonzero_u32, |n| Range {
                 lower: Bound::Inclusive(n),
                 upper: Bound::Inclusive(n),
             }),
@@ -107,23 +107,23 @@ impl SequenceRange {
     }
 }
 
-#[derive(Debug, PartialEq, Eq)]
-pub struct SequenceSet {
-    ranges: Vec<SequenceRange>,
+#[derive(Debug, PartialEq, Eq, Clone)]
+pub struct Set {
+    ranges: Vec<Range>,
 }
 
-impl SequenceSet {
+impl Set {
     pub fn parse(i: &str) -> IResult<&str, Self> {
-        let (i, ranges) = separated_list0(char(','), SequenceRange::parse)(i)?;
+        let (i, ranges) = separated_list0(char(','), Range::parse)(i)?;
         Ok((i, Self { ranges }))
     }
 }
 
-impl fmt::Display for SequenceSet {
+impl fmt::Display for Set {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut iter = self.ranges.iter().peekable();
         while let Some(range) = iter.next() {
-            write!(f, "{}", range)?;
+            range.fmt(f)?;
             if iter.peek().is_some() {
                 write!(f, ",")?;
             }
@@ -134,13 +134,10 @@ impl fmt::Display for SequenceSet {
 
 #[cfg(test)]
 mod tests {
-    use crate::sequence::{SequenceRange, SequenceSet};
+    use crate::sequence::Set;
 
     #[test]
     fn parse() {
-        assert_eq!(
-            SequenceSet::parse("1:3,5,6:*").unwrap().1.to_string(),
-            "1:3,5,6:*"
-        )
+        assert_eq!(Set::parse("1:3,5,6:*").unwrap().1.to_string(), "1:3,5,6:*")
     }
 }

@@ -1,16 +1,20 @@
 [package]
 name = "brev"
-version = "0.1.0"
+version.workspace = true
 edition = "2021"
 
 [workspace]
 members = [".", "crates/*"]
+
+[workspace.package]
+version = "0.1.0"
 
 [workspace.dependencies]
 async-trait = "0.1"
 auth = { path = "crates/auth" }
 email_address = { version = "0.2", default-features = false }
 imap = { path = "crates/imap" }
+imap-proto = { path = "crates/imap-proto" }
 line = { path = "crates/line" }
 futures-util = "0.3"
 nom = "7.1"
@@ -29,7 +33,10 @@ async-trait.workspace = true
 auth.workspace = true
 dotenv = "0.15.0"
 imap.workspace = true
+imap-proto.workspace = true
 line.workspace = true
+futures-util.workspace = true
+paste = "1.0"
 rcgen = "0.11.1"
 smtp = { path = "crates/smtp" }
 tokio-rustls.workspace = true

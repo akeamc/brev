@@ -1,15 +1,11 @@
 use auth::{
     sasl::{self, EatResult, Mechanism, MechanismError, MechanismKind, Plain},
-    Identity, ValidationError, Validator,
+    Identity, Validator,
 };
 use base64::Engine;
+use imap_proto::command;
 use line::{read_line, write, write_flush, ReadLineError};
 use tokio::io::{AsyncBufRead, AsyncWrite};
-
-use crate::{
-    command::{self, Authenticate},
-    response::StatusResponse,
-};
 
 const BASE64: base64::engine::GeneralPurpose = base64::engine::general_purpose::STANDARD;
 
@@ -18,7 +14,7 @@ enum Authenticator {
 }
 
 impl Authenticator {
-    fn init(mechanism: &MechanismKind) -> (Self, Vec<u8>) {
+    fn init(mechanism: MechanismKind) -> (Self, Vec<u8>) {
         match mechanism {
             MechanismKind::Plain => {
                 let (plain, challenge) = Plain::init();
@@ -32,8 +28,7 @@ impl Authenticator {
         let i = base64
             .iter()
             .rposition(|&c| c != b'\r' && c != b'\n')
-            .map(|i| i + 1)
-            .unwrap_or(0);
+            .map_or(0, |i| i + 1);
         let base64 = &base64[..i];
 
         let bytes = if base64 == b"=" {
@@ -68,17 +63,22 @@ impl From<ReadLineError> for Error {
     }
 }
 
+/// Perform SASL authentication.
+///
+/// # Errors
+///
+///
 pub async fn authenticate<S: AsyncBufRead + AsyncWrite + Unpin, A: Validator>(
     stream: &mut S,
     data: command::Authenticate,
     validator: &A,
 ) -> Result<Identity, Error> {
-    let Authenticate {
+    let command::Authenticate {
         mechanism,
         mut initial_response,
     } = data;
 
-    let (mut authenticator, mut challenge) = Authenticator::init(&mechanism);
+    let (mut authenticator, mut challenge) = Authenticator::init(mechanism);
 
     loop {
         let line = if let Some(initial_response) = initial_response.take() {
@@ -102,24 +102,6 @@ pub async fn authenticate<S: AsyncBufRead + AsyncWrite + Unpin, A: Validator>(
             sasl::Response::Proceed(bytes) => {
                 challenge = bytes;
             }
-        }
-    }
-}
-
-impl From<ValidationError> for StatusResponse {
-    fn from(value: ValidationError) -> Self {
-        match value {
-            ValidationError::InvalidCredentials => Self::no("invalid credentials"),
-            ValidationError::Unknown => Self::bad("invalid identity"),
-        }
-    }
-}
-
-impl From<MechanismError> for StatusResponse {
-    fn from(value: MechanismError) -> Self {
-        match value {
-            MechanismError::Decode => Self::bad("failed to decode response"),
-            MechanismError::Validation(e) => e.into(),
         }
     }
 }

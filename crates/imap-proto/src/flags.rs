@@ -1,7 +1,5 @@
 use std::{convert::Infallible, fmt};
 
-use crate::protocol::fmt_paren_list;
-
 #[derive(Debug)]
 pub enum Flag {
     Seen,
@@ -63,7 +61,7 @@ pub struct Response(pub Vec<Flag>);
 impl fmt::Display for Response {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "FLAGS ")?;
-        fmt_paren_list(f, self.0.iter())
+        crate::fmt_paren_list(f, self.0.iter())
     }
 }
 

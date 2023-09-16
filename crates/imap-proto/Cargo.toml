@@ -1,0 +1,13 @@
+[package]
+name = "imap-proto"
+version.workspace = true
+edition = "2021"
+
+[dependencies]
+auth.workspace = true
+const_format = "0.2.31"
+nom.workspace = true
+paste = "1.0"
+secrecy.workspace = true
+tracing.workspace = true
+util.workspace = true

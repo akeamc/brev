@@ -4,24 +4,28 @@ use std::{
 };
 
 use auth::sasl::MechanismKind;
-use line::{read_line, write_flush, ReadLineError};
 use nom::{
     bytes::complete::{tag, take_while},
-    character::complete::space0,
+    character::complete::{space0, space1},
     combinator::{map, map_res, opt},
     sequence::delimited,
     IResult,
 };
 use secrecy::SecretString;
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite};
-use tracing::{debug, instrument};
+use tracing::debug;
 
 use crate::{
-    protocol::{capability::Capabilities, fetch, status},
     response::{self, StatusResponse, TaggedStatusResponse},
-    sequence::SequenceSet,
-    Tag,
+    sequence, Tag,
 };
+
+use self::capability::Capabilities;
+
+pub mod capability;
+pub mod fetch;
+pub mod list;
+pub mod select;
+pub mod status;
 
 pub struct Request<T> {
     pub tag: Tag,
@@ -169,23 +173,28 @@ args!(Unsubscribe {
     mailbox: String,
 } "<mailbox>");
 
-#[derive(Debug)]
-pub struct List {
-    options: Option<String>,
+args!(List {
     reference: String,
     mailbox: String,
-}
+} "<reference> <mailbox>");
 
-impl ParseArgs for List {
-    const SYNTAX: &'static str = "[<options>] <reference> <mailbox>";
+// #[derive(Debug)]
+// pub struct List {
+//     options: Option<String>,
+//     reference: String,
+//     mailbox: String,
+// }
 
-    fn parse(i: &str, is_uid: bool) -> IResult<&str, Self>
-    where
-        Self: Sized,
-    {
-        todo!()
-    }
-}
+// impl ParseArgs for List {
+//     const SYNTAX: &'static str = "[<options>] <reference> <mailbox>";
+
+//     fn parse(i: &str, is_uid: bool) -> IResult<&str, Self>
+//     where
+//         Self: Sized,
+//     {
+//         todo!()
+//     }
+// }
 
 args!(Status {
     mailbox: String,
@@ -208,7 +217,7 @@ pub struct Expunge {
 #[derive(Debug)]
 pub struct Fetch {
     is_uid: bool,
-    sequence_set: SequenceSet,
+    sequence_set: sequence::Set,
     items: fetch::Items,
 }
 
@@ -219,7 +228,8 @@ impl ParseArgs for Fetch {
     where
         Self: Sized,
     {
-        let (i, sequence_set) = SequenceSet::parse(i)?;
+        let (i, sequence_set) = sequence::Set::parse(i)?;
+        let (i, _) = space1(i)?;
         let (i, items) = fetch::Items::parse(i)?;
         Ok((
             i,
@@ -290,6 +300,71 @@ pub enum Command {
     Store { is_uid: bool },
     Copy { is_uid: bool },
     Move { is_uid: bool },
+}
+
+#[derive(Debug)]
+pub enum CommandName {
+    Capability,
+    Noop,
+    Logout,
+    Starttls,
+    Authenticate,
+    Login,
+    Enable,
+    Select,
+    Examine,
+    Create,
+    Delete,
+    Rename,
+    Subscribe,
+    Unsubscribe,
+    List,
+    Namespace,
+    Status,
+    Append,
+    Idle,
+    Close,
+    Unselect,
+    Expunge,
+    Search,
+    Fetch,
+    Store,
+    Copy,
+    Move,
+}
+
+impl Command {
+    pub fn name(&self) -> CommandName {
+        match self {
+            Command::Capability => CommandName::Capability,
+            Command::Noop => CommandName::Noop,
+            Command::Logout => CommandName::Logout,
+            Command::Starttls => CommandName::Starttls,
+            Command::Authenticate(_) => CommandName::Authenticate,
+            Command::Login(_) => CommandName::Login,
+            Command::Enable(_) => CommandName::Enable,
+            Command::Select(_) => CommandName::Select,
+            Command::Examine(_) => CommandName::Examine,
+            Command::Create(_) => CommandName::Create,
+            Command::Delete(_) => CommandName::Delete,
+            Command::Rename(_) => CommandName::Rename,
+            Command::Subscribe(_) => CommandName::Subscribe,
+            Command::Unsubscribe(_) => CommandName::Unsubscribe,
+            Command::List(_) => CommandName::List,
+            Command::Namespace => CommandName::Namespace,
+            Command::Status(_) => CommandName::Status,
+            Command::Append => CommandName::Append,
+            Command::Idle => CommandName::Idle,
+            Command::Close => CommandName::Close,
+            Command::Unselect => CommandName::Unselect,
+            Command::Expunge(_) => CommandName::Expunge,
+            Command::Search { is_uid } => CommandName::Search,
+            Command::Fetch(_) => CommandName::Fetch,
+            Command::Store { is_uid } => CommandName::Store,
+            Command::Copy { is_uid } => CommandName::Copy,
+            Command::Move { is_uid } => CommandName::Move,
+        }
+    }
 }
 
 fn parse_command(s: &str, is_uid: bool) -> Result<Command, ParseError> {
@@ -365,7 +440,6 @@ impl From<Utf8Error> for Error {
     }
 }
 
-
 impl TryFrom<&[u8]> for TaggedCommand {
     type Error = Error;
 
@@ -378,32 +452,8 @@ impl TryFrom<&[u8]> for TaggedCommand {
                 tag: tag.into(),
                 command: kind,
             }),
-            Err(e) => Err(Error::Bad(
-                StatusResponse::from(e).with_tag(tag),
-            )),
+            Err(e) => Err(Error::Bad(StatusResponse::from(e).with_tag(tag))),
         }
-    }
-}
-
-#[instrument(skip_all)]
-pub async fn read_cmd<S: AsyncRead + AsyncBufRead + AsyncWrite + Unpin>(
-    stream: &mut S,
-) -> std::io::Result<Option<TaggedCommand>> {
-    let mut buf = Vec::new();
-    loop {
-        match read_line(stream, &mut buf).await {
-            Ok(()) => match TaggedCommand::try_from(&buf[..]) {
-                Ok(cmd) => return Ok(Some(cmd)),
-                Err(Error::Bad(res)) => {
-                    write_flush(stream, res.to_string()).await?;
-                }
-                Err(Error::InvalidUtf8) => debug!("invalid utf8"),
-            },
-            Err(ReadLineError::Eof) => return Ok(None),
-            Err(ReadLineError::Io(e)) => return Err(e),
-        }
-
-        buf.clear();
     }
 }
 
@@ -465,7 +515,7 @@ impl ParseArg for MechanismKind {
 impl ParseArg for Capabilities {
     fn parse_arg(i: &str) -> IResult<&str, Self> {
         let (i, _) = space0(i)?;
-        Ok(("", i.split(" ").collect()))
+        Ok(("", i.split(' ').collect()))
     }
 }
 
@@ -478,13 +528,13 @@ impl ParseArg for status::Items {
     }
 }
 
-impl ParseArg for SequenceSet {
+impl ParseArg for sequence::Set {
     fn parse_arg(i: &str) -> IResult<&str, Self>
     where
         Self: Sized,
     {
         let (i, _) = space0(i)?;
-        SequenceSet::parse(i)
+        sequence::Set::parse(i)
     }
 }
 
@@ -511,9 +561,7 @@ mod tests {
 
     use secrecy::ExposeSecret;
 
-    use crate::{command::Login, protocol::status};
-
-    use super::{Command, ParseError};
+    use super::*;
 
     #[test]
     fn dquote() {
@@ -543,7 +591,8 @@ mod tests {
 
     #[test]
     fn login() {
-        let Ok(Command::Login(Login{username, password})) = "login alice \"hunter 2\"".parse() else {
+        let Ok(Command::Login(Login { username, password })) = "login alice \"hunter 2\"".parse()
+        else {
             panic!()
         };
 
