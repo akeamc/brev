@@ -1,3 +1,5 @@
+use std::ops::ControlFlow;
+
 use async_trait::async_trait;
 use secrecy::SecretString;
 
@@ -23,13 +25,17 @@ impl From<DecodeError> for super::MechanismError {
     }
 }
 
-/// Decode base64-encoded credentials.
+/// Decode plain credentials.
+///
+/// Often, the credentials will be base64-encoded like so:
 ///
 /// ```text
 /// C: AUTH PLAIN
 /// S: +
 /// C: AGJvYgBodW50ZXIy
 /// ```
+///
+/// # Examples
 ///
 /// ```
 /// # use auth::Credentials;
@@ -65,9 +71,9 @@ impl Mechanism for Plain {
         &mut self,
         validator: &A,
         challenge: &[u8],
-    ) -> Result<super::Response, super::MechanismError> {
+    ) -> super::MechanismResult {
         let credentials = decode(challenge)?;
         let identity = validator.validate(&credentials).await?;
-        Ok(super::Response::Success(identity))
+        Ok(ControlFlow::Break(identity))
     }
 }

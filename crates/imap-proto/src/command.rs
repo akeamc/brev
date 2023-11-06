@@ -3,7 +3,7 @@ use std::{
     str::{FromStr, Utf8Error},
 };
 
-use auth::sasl::MechanismKind;
+use auth::sasl::WhichMechanism;
 use nom::{
     bytes::complete::{tag, take_while},
     character::complete::{space0, space1},
@@ -122,7 +122,7 @@ macro_rules! args {
 }
 
 args!(Authenticate {
-    mechanism: MechanismKind,
+    mechanism: WhichMechanism,
     initial_response: Option<String>,
 } "<mechanism> [<initial-response>]");
 
@@ -505,7 +505,7 @@ impl ParseArg for SecretString {
     }
 }
 
-impl ParseArg for MechanismKind {
+impl ParseArg for WhichMechanism {
     fn parse_arg(i: &str) -> IResult<&str, Self> {
         let (i, _) = space0(i)?;
         map_res(parse_str, |s| s.parse())(i)

@@ -1,6 +1,6 @@
 use std::fmt;
 
-use auth::sasl::MechanismKind;
+use auth::sasl::WhichMechanism;
 use util::flags;
 
 flags! {
@@ -17,9 +17,9 @@ flags! {
 
 impl Capabilities {
     #[must_use]
-    pub const fn auth(mechanism: MechanismKind) -> Self {
+    pub const fn auth(mechanism: WhichMechanism) -> Self {
         match mechanism {
-            MechanismKind::Plain => Self::AUTH_PLAIN,
+            WhichMechanism::Plain => Self::AUTH_PLAIN,
         }
     }
 }

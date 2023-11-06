@@ -46,7 +46,7 @@ pub enum Command {
     ///
     /// See [RFC 4954](https://datatracker.ietf.org/doc/html/rfc4954#section-4).
     Auth {
-        mechanism: auth::sasl::MechanismKind,
+        mechanism: auth::sasl::WhichMechanism,
         /// Initial client response to save a round-trip.
         initial_response: Option<String>,
     },
@@ -80,10 +80,10 @@ impl TryFrom<&[u8]> for Command {
                 domain: args.to_owned(),
             },
             "MAIL" => Command::Mail {
-                from: mailbox(args).map_err(|_| Error::Syntax("MAIL FROM:<address>"))?,
+                from: mailbox(args).map_err(|()| Error::Syntax("MAIL FROM:<address>"))?,
             },
             "RCPT" => Command::Rcpt {
-                to: mailbox(args).map_err(|_| Error::Syntax("RCPT TO:<address>"))?,
+                to: mailbox(args).map_err(|()| Error::Syntax("RCPT TO:<address>"))?,
             },
             "DATA" => Command::Data,
             "RSET" => Command::Rset,

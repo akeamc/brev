@@ -1,5 +1,7 @@
+use std::ops::ControlFlow;
+
 use auth::{
-    sasl::{self, EatResult, Mechanism, MechanismError, MechanismKind, Plain},
+    sasl::{Mechanism, MechanismError, MechanismResult, Plain, WhichMechanism},
     Identity, Validator,
 };
 use base64::Engine;
@@ -14,16 +16,16 @@ enum Authenticator {
 }
 
 impl Authenticator {
-    fn init(mechanism: MechanismKind) -> (Self, Vec<u8>) {
+    fn init(mechanism: WhichMechanism) -> (Self, Vec<u8>) {
         match mechanism {
-            MechanismKind::Plain => {
+            WhichMechanism::Plain => {
                 let (plain, challenge) = Plain::init();
                 (Self::Plain(plain), challenge)
             }
         }
     }
 
-    async fn eat<A: Validator>(&mut self, validator: &A, base64: &[u8]) -> EatResult {
+    async fn eat<A: Validator>(&mut self, validator: &A, base64: &[u8]) -> MechanismResult {
         // trim trailing whitespace
         let i = base64
             .iter()
@@ -96,10 +98,10 @@ pub async fn authenticate<S: AsyncBufRead + AsyncWrite + Unpin, A: Validator>(
         };
 
         match authenticator.eat(validator, &line).await? {
-            sasl::Response::Success(identity) => {
+            ControlFlow::Break(identity) => {
                 return Ok(identity);
             }
-            sasl::Response::Proceed(bytes) => {
+            ControlFlow::Continue(bytes) => {
                 challenge = bytes;
             }
         }
